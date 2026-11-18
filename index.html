@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CineMatch - Găsește Filmul Perfect</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>Cine<span>Match</span></h1>
+            <p>Găsește filmul perfect pentru tine sau pentru gașcă.</p>
+        </header>
+
+        <main>
+            <!-- ECRANUL 1: MENIU PRINCIPAL -->
+            <section id="home-screen" class="card">
+                <h2>Alege cum vrei să căutăm</h2>
+                <p class="subtitle">Ce facem în seara asta?</p>
+                
+                <div class="menu-buttons">
+                    <button class="btn-primary" onclick="startQuiz()">🧠 Quiz Rapid (Solo - 6 Pași)</button>
+                    <button class="btn-secondary" onclick="openRoomChoice()">👥 Seară cu Gașca (Cameră Live)</button>
+                    <button class="btn-secondary" onclick="startWheel()">🎡 Roata Norocului</button>
+                    <button class="btn-secondary" onclick="openVipTicket()">🎟️ Biletul Meu VIP</button>
+                </div>
+            </section>
+
+            <!-- ECRANUL 2: CREEAZĂ SAU INTRĂ ÎN CAMERĂ -->
+            <section id="room-choice-screen" class="card hidden">
+                <h2>Modul Gașcă 🍿</h2>
+                <p class="subtitle">Scrie-ți numele și creează o cameră nouă sau intră cu un cod:</p>
+
+                <input type="text" id="player-name-input" class="input-field" placeholder="Numele tău (ex: Maria)" maxlength="20">
+
+                <button class="btn-primary" onclick="createRoom()">➕ Creează o Cameră Nouă</button>
+
+                <div class="divider"><span>SAU INTRĂ ÎNTR-O CAMERĂ</span></div>
+
+                <div class="join-row">
+                    <input type="text" id="join-code-input" class="input-field" placeholder="Cod (ex: CINE-4821)" style="margin-bottom: 0; text-transform: uppercase;">
+                    <button class="btn-secondary" onclick="joinRoom()" style="width: auto; padding: 14px 20px; margin-bottom: 0;">Intră →</button>
+                </div>
+
+                <button class="btn-back" onclick="goHome()">← Înapoi la meniu</button>
+            </section>
+
+            <!-- ECRANUL 3: LOBBY CAMERĂ (VEZI CINE INTRĂ + START) -->
+            <section id="lobby-screen" class="card hidden">
+                <h2>Lobby Cameră 🎬</h2>
+                <p class="subtitle">Trimite codul sau scanează QR-ul de pe aceeași rețea/host:</p>
+
+                <div id="qrcode-box"></div>
+                <div class="session-code">Cod cameră: <strong id="lobby-room-code">#CINE-0000</strong></div>
+
+                <div class="players-box">
+                    <div class="players-header">
+                        <span>Participanți în cameră (<span id="players-count">1</span>):</span>
+                        <button class="btn-mini" onclick="addDemoFriend()" title="Adaugă un prieten de test">+ Simulează prieten</button>
+                    </div>
+                    <ul id="players-list" class="players-list"></ul>
+                </div>
+
+                <button class="btn-whatsapp" onclick="sendWhatsAppInvite()">💬 Invită prietenii pe WhatsApp</button>
+                <button id="btn-start-group" class="btn-primary" onclick="hostStartVoting()">🚀 START Votare pentru Toți!</button>
+                <p id="waiting-host-msg" class="subtitle hidden" style="color: #fbbf24; margin-top: 10px;">⏳ Se așteaptă ca gazda să apese START...</p>
+
+                <button class="btn-back" onclick="leaveRoom()">← Ieși din cameră</button>
+            </section>
+
+            <!-- ECRANUL 4: VOTARE ÎN COMUN -->
+            <section id="group-voting-screen" class="card hidden">
+                <div class="progress-bar">
+                    <div id="group-progress-fill"></div>
+                </div>
+                <span id="group-vote-counter">Filmul 1 din 8</span>
+                <h2 style="margin-top: 8px;">Votați pentru seară 🍿</h2>
+                <p class="subtitle" id="voting-player-label">Votezi ca: <strong>Tu</strong></p>
+                
+                <div class="swipe-card-container" id="swipe-card">
+                    <h3 id="group-movie-title">Titlu Film</h3>
+                    <p id="group-movie-meta" class="movie-meta" style="margin-top: 4px;"></p>
+                    <p id="group-movie-desc" class="movie-desc" style="margin-top: 8px;"></p>
+                </div>
+
+                <div class="swipe-buttons">
+                    <button class="btn-dislike" onclick="voteMovie(false)">❌ Nu vreau</button>
+                    <button class="btn-like" onclick="voteMovie(true)">❤️ Vreau!</button>
+                </div>
+            </section>
+
+            <!-- ECRANUL 5: REZULTAT COMUN GAȘCĂ -->
+            <section id="group-result-screen" class="card hidden">
+                <h2>🏆 Rezultatul Votului!</h2>
+                <p class="subtitle" id="group-result-subtitle">Clasamentul filmelor votate de gașcă:</p>
+                
+                <div id="group-ranking-container" class="movies-list"></div>
+
+                <button class="btn-primary" onclick="openVipTicket()">🎟️ Generează Biletul VIP</button>
+                <button class="btn-secondary" onclick="leaveRoom()">🔄 Înapoi la Meniu</button>
+            </section>
+
+            <!-- ECRANUL 6: QUIZ RAPID SOLO -->
+            <section id="quiz-screen" class="card hidden">
+                <div class="progress-bar">
+                    <div id="progress-fill"></div>
+                </div>
+                <span id="question-counter">Întrebarea 1 din 6</span>
+                <h2 id="question-text">Care este vibe-ul serii?</h2>
+                
+                <div id="options-container" class="options-grid"></div>
+                <button class="btn-back" onclick="goHome()">← Înapoi la meniu</button>
+            </section>
+
+            <!-- ECRANUL 7: ROATA NOROCULUI -->
+            <section id="wheel-screen" class="card hidden">
+                <h2>🎡 Roata Norocului</h2>
+                <p class="subtitle">Nu știi ce să alegi? Lasă roata să decidă!</p>
+                <div id="wheel-result" class="wheel-box">Apasă pe buton pentru a învârti!</div>
+                <button class="btn-primary" onclick="spinWheel()">Învârte Roata!</button>
+                <button class="btn-secondary" onclick="goHome()">← Înapoi la meniu</button>
+            </section>
+
+            <!-- ECRANUL 8: REZULTATE QUIZ SOLO -->
+            <section id="result-screen" class="card hidden">
+                <h2>🏆 Recomandările Tale</h2>
+                <p class="subtitle">Filmele perfecte alese pe gustul tău:</p>
+                
+                <div id="movies-container" class="movies-list"></div>
+
+                <button class="btn-primary" onclick="openVipTicket()">🎟️ Vezi Biletul VIP</button>
+                <button class="btn-secondary" onclick="goHome()">🔄 Meniul Principal</button>
+            </section>
+
+            <!-- ECRANUL 9: BILET VIP -->
+            <section id="vip-screen" class="card hidden">
+                <h2>🎟️ Bilet de Cinema VIP</h2>
+                <p class="subtitle">Invitația ta oficială pentru seara de film</p>
+                
+                <div class="vip-ticket-box">
+                    <h3>CineMatch Pass</h3>
+                    <p class="movie-desc" style="margin: 8px 0;">Acces direct la voturi în grup și seară de film.</p>
+                    <div class="session-code" style="margin-bottom: 0;">Cameră activă: <strong id="vip-room-code">#CINE-8821</strong></div>
+                </div>
+
+                <button class="btn-whatsapp" onclick="sendWhatsAppInvite()">💬 Trimite invitația pe WhatsApp</button>
+                <button class="btn-secondary" onclick="goHome()">← Înapoi la meniu</button>
+            </section>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

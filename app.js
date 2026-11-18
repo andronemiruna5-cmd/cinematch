@@ -1,4 +1,5 @@
 const OFFICIAL_URL = "https://andronemiruna5-cmd.github.io/cinematch/";
+const WS_BROKER = "wss://broker.emqx.io:8084/mqtt";
 
 const moviesDatabase = [
     // Acțiune
@@ -54,22 +55,21 @@ const questions = [
 let currentQ = 0;
 let userAnswers = [];
 
-// Variabile pentru Camera Gașcă
+// Stare WebSocket & Cameră
+let wsClient = null;
+let roomTopic = "";
 let currentRoomCode = "";
 let currentPlayerName = "";
 let isHost = false;
+let roomState = null;
 let votingPool = [];
 let groupMovieIndex = 0;
 let myVotes = {};
-let lobbySyncInterval = null;
-let joinedViaLink = false;
 
-// Verificăm la pornire dacă s-a intrat direct printr-un link / QR ?room=CINE-XXXX
 window.onload = function() {
     const params = new URLSearchParams(window.location.search);
     const roomParam = params.get("room");
     if (roomParam) {
-        joinedViaLink = true;
         openRoomChoice();
         document.getElementById("join-code-input").value = roomParam.toUpperCase();
     }
@@ -81,24 +81,101 @@ function showScreen(screenId) {
 }
 
 function goHome() {
-    clearInterval(lobbySyncInterval);
+    disconnectWS();
     showScreen('home-screen');
 }
 
-// --- MODUL CAMERĂ GAȘCĂ ---
 function openRoomChoice() {
     showScreen('room-choice-screen');
 }
 
-function getRoomData(code) {
-    const raw = localStorage.getItem("cinematch_room_" + code);
-    return raw ? JSON.parse(raw) : null;
+function disconnectWS() {
+    if (wsClient) {
+        wsClient.end();
+        wsClient = null;
+    }
 }
 
-function saveRoomData(code, data) {
-    localStorage.setItem("cinematch_room_" + code, JSON.stringify(data));
+// --- CONEXIUNE WEBSOCKET REAL-TIME ---
+function connectToRoomWS(code, onConnected) {
+    disconnectWS();
+    roomTopic = `cinematch_live_2026/room/${code}`;
+    const clientId = "cm_" + Math.random().toString(16).substr(2, 8);
+
+    wsClient = mqtt.connect(WS_BROKER, {
+        clientId: clientId,
+        clean: true,
+        connectTimeout: 5000
+    });
+
+    wsClient.on("connect", () => {
+        wsClient.subscribe(roomTopic, (err) => {
+            if (!err && onConnected) onConnected();
+        });
+    });
+
+    wsClient.on("message", (topic, payload) => {
+        if (topic !== roomTopic) return;
+        try {
+            const msg = JSON.parse(payload.toString());
+            handleWSMessage(msg);
+        } catch (e) {
+            console.error("Eroare mesaj WS:", e);
+        }
+    });
 }
 
+function sendWS(msg) {
+    if (wsClient && wsClient.connected) {
+        wsClient.publish(roomTopic, JSON.stringify(msg));
+    }
+}
+
+function handleWSMessage(msg) {
+    // Gazda primește cerere de intrare de la un prieten
+    if (msg.type === "JOIN_REQUEST" && isHost && roomState) {
+        if (!roomState.players.some(p => p.name === msg.name)) {
+            roomState.players.push({ name: msg.name, isHost: false, done: false });
+        }
+        updateLobbyUI();
+        // Gazda trimite imediat starea completă a camerei tuturor
+        sendWS({ type: "ROOM_SYNC", state: roomState });
+    }
+
+    // Toți participanții primesc starea actualizată a camerei
+    if (msg.type === "ROOM_SYNC") {
+        const wasWaiting = !roomState || roomState.status === "waiting";
+        roomState = msg.state;
+
+        if (roomState.status === "waiting") {
+            if (document.getElementById("lobby-screen").classList.contains("hidden")) {
+                enterLobbyUI();
+            }
+            updateLobbyUI();
+        } else if (roomState.status === "voting" && wasWaiting) {
+            beginGroupVoting(roomState.movies);
+        } else if (roomState.status === "voting" && !document.getElementById("group-result-screen").classList.contains("hidden")) {
+            // Actualizare live a clasamentului pe măsură ce votează și ceilalți
+            showGroupFinalResults();
+        }
+    }
+
+    // Gazda primește voturile de la un jucător
+    if (msg.type === "SUBMIT_VOTES" && isHost && roomState) {
+        Object.keys(msg.votes).forEach(movieId => {
+            roomState.votes[movieId] = (roomState.votes[movieId] || 0) + 1;
+        });
+        const player = roomState.players.find(p => p.name === msg.player);
+        if (player) player.done = true;
+
+        sendWS({ type: "ROOM_SYNC", state: roomState });
+        if (!document.getElementById("group-result-screen").classList.contains("hidden")) {
+            showGroupFinalResults();
+        }
+    }
+}
+
+// --- CREARE ȘI INTRARE ÎN CAMERĂ ---
 function createRoom() {
     const nameInput = document.getElementById("player-name-input").value.trim();
     currentPlayerName = nameInput || "Gazda";
@@ -109,7 +186,7 @@ function createRoom() {
 
     const shuffled = [...moviesDatabase].sort(() => 0.5 - Math.random()).slice(0, 8);
 
-    const roomData = {
+    roomState = {
         code: currentRoomCode,
         status: "waiting",
         players: [{ name: currentPlayerName, isHost: true, done: false }],
@@ -117,8 +194,10 @@ function createRoom() {
         votes: {}
     };
 
-    saveRoomData(currentRoomCode, roomData);
-    enterLobby();
+    connectToRoomWS(currentRoomCode, () => {
+        enterLobbyUI();
+        updateLobbyUI();
+    });
 }
 
 function joinRoom() {
@@ -133,49 +212,28 @@ function joinRoom() {
     currentPlayerName = nameInput || "Invitat";
     isHost = false;
     currentRoomCode = codeInput;
+    roomState = null;
 
-    let roomData = getRoomData(currentRoomCode);
+    connectToRoomWS(currentRoomCode, () => {
+        // Trimitem cerere de conectare către gazdă prin WebSocket
+        sendWS({ type: "JOIN_REQUEST", name: currentPlayerName });
 
-    // Dacă intră de pe alt telefon prin link/QR-ul oficial, inițializăm sesiunea pentru acel cod
-    if (!roomData) {
-        const params = new URLSearchParams(window.location.search);
-        const urlRoom = (params.get("room") || "").toUpperCase().replace("#", "");
-        
-        if (joinedViaLink && urlRoom === currentRoomCode) {
-            const defaultMovies = [...moviesDatabase].slice(0, 8);
-            roomData = {
-                code: currentRoomCode,
-                status: "voting", // Pe alt telefon fără backend, poate vota imediat
-                players: [{ name: "Gazdă", isHost: true, done: false }],
-                movies: defaultMovies,
-                votes: {}
-            };
-        } else {
-            alert("❌ Această cameră nu există sau nu a fost creată încă de gazdă!");
-            return;
-        }
-    }
-
-    if (!roomData.players.some(p => p.name === currentPlayerName)) {
-        roomData.players.push({ name: currentPlayerName, isHost: false, done: false });
-        saveRoomData(currentRoomCode, roomData);
-    }
-
-    if (roomData.status === "voting") {
-        beginGroupVoting(roomData.movies);
-    } else {
-        enterLobby();
-    }
+        // Verificăm dacă gazda răspunde în 3.5 secunde
+        setTimeout(() => {
+            if (!roomState) {
+                disconnectWS();
+                alert("❌ Nu s-a găsit nicio cameră activă cu codul #" + currentRoomCode + "! Verifică dacă gazda are camera deschisă.");
+            }
+        }, 3500);
+    });
 }
 
-function enterLobby() {
+function enterLobbyUI() {
     showScreen('lobby-screen');
     document.getElementById("lobby-room-code").innerText = "#" + currentRoomCode;
     document.getElementById("vip-room-code").innerText = "#" + currentRoomCode;
 
-    // QR-ul folosește STRICT adresa oficială GitHub Pages + codul camerei
     const roomUrl = `${OFFICIAL_URL}?room=${currentRoomCode}`;
-
     const qrContainer = document.getElementById("qrcode-box");
     qrContainer.innerHTML = "";
     new QRCode(qrContainer, {
@@ -194,64 +252,43 @@ function enterLobby() {
         document.getElementById("btn-start-group").classList.add("hidden");
         document.getElementById("waiting-host-msg").classList.remove("hidden");
     }
-
-    updateLobbyUI();
-    clearInterval(lobbySyncInterval);
-    lobbySyncInterval = setInterval(syncLobbyState, 1000);
-}
-
-function syncLobbyState() {
-    const roomData = getRoomData(currentRoomCode);
-    if (!roomData) return;
-
-    updateLobbyUI();
-
-    if (roomData.status === "voting") {
-        clearInterval(lobbySyncInterval);
-        beginGroupVoting(roomData.movies);
-    }
 }
 
 function updateLobbyUI() {
-    const roomData = getRoomData(currentRoomCode);
-    if (!roomData) return;
-
+    if (!roomState) return;
     const list = document.getElementById("players-list");
     list.innerHTML = "";
-    roomData.players.forEach(p => {
+    roomState.players.forEach(p => {
         list.innerHTML += `
             <li>
                 <span>👤 ${p.name}</span>
-                ${p.isHost ? '<span class="host-tag">GAZDĂ</span>' : '<span style="color:#4ade80; font-size:0.8rem;">Conectat</span>'}
+                ${p.isHost ? '<span class="host-tag">GAZDĂ</span>' : '<span style="color:#4ade80; font-size:0.8rem;">Conectat Live</span>'}
             </li>
         `;
     });
-    document.getElementById("players-count").innerText = roomData.players.length;
+    document.getElementById("players-count").innerText = roomState.players.length;
 }
 
 function addDemoFriend() {
-    const roomData = getRoomData(currentRoomCode);
-    if (!roomData) return;
+    if (!isHost || !roomState) return;
     const demoNames = ["Andrei", "Elena", "Alex", "Ioana", "Vlad"];
-    const nextName = demoNames[(roomData.players.length - 1) % demoNames.length];
+    const nextName = demoNames[(roomState.players.length - 1) % demoNames.length];
     
-    roomData.players.push({ name: nextName, isHost: false, done: true, isBot: true });
-    roomData.movies.forEach(m => {
+    roomState.players.push({ name: nextName, isHost: false, done: true });
+    roomState.movies.forEach(m => {
         if (Math.random() > 0.45) {
-            roomData.votes[m.id] = (roomData.votes[m.id] || 0) + 1;
+            roomState.votes[m.id] = (roomState.votes[m.id] || 0) + 1;
         }
     });
-    saveRoomData(currentRoomCode, roomData);
     updateLobbyUI();
+    sendWS({ type: "ROOM_SYNC", state: roomState });
 }
 
 function hostStartVoting() {
-    const roomData = getRoomData(currentRoomCode);
-    if (!roomData) return;
-    roomData.status = "voting";
-    saveRoomData(currentRoomCode, roomData);
-    clearInterval(lobbySyncInterval);
-    beginGroupVoting(roomData.movies);
+    if (!isHost || !roomState) return;
+    roomState.status = "voting";
+    sendWS({ type: "ROOM_SYNC", state: roomState });
+    beginGroupVoting(roomState.movies);
 }
 
 function beginGroupVoting(movies) {
@@ -286,29 +323,36 @@ function voteMovie(liked) {
 }
 
 function submitGroupVotes() {
-    const roomData = getRoomData(currentRoomCode);
-    if (roomData) {
+    if (isHost && roomState) {
         Object.keys(myVotes).forEach(id => {
-            roomData.votes[id] = (roomData.votes[id] || 0) + 1;
+            roomState.votes[id] = (roomState.votes[id] || 0) + 1;
         });
-        const me = roomData.players.find(p => p.name === currentPlayerName);
+        const me = roomState.players.find(p => p.name === currentPlayerName);
         if (me) me.done = true;
-        saveRoomData(currentRoomCode, roomData);
+        sendWS({ type: "ROOM_SYNC", state: roomState });
+    } else {
+        // Invitatul trimite voturile prin WebSocket către gazdă
+        sendWS({ type: "SUBMIT_VOTES", player: currentPlayerName, votes: myVotes });
+        // Actualizăm local optimist până vine sync-ul
+        if (roomState) {
+            Object.keys(myVotes).forEach(id => {
+                roomState.votes[id] = (roomState.votes[id] || 0) + 1;
+            });
+        }
     }
     showGroupFinalResults();
 }
 
 function showGroupFinalResults() {
     showScreen('group-result-screen');
-    const roomData = getRoomData(currentRoomCode);
     const container = document.getElementById("group-ranking-container");
     container.innerHTML = "";
 
-    const totalPlayers = roomData ? roomData.players.length : 1;
-    const ranked = (roomData ? roomData.movies : votingPool)
+    const totalPlayers = roomState ? roomState.players.length : 1;
+    const ranked = (roomState ? roomState.movies : votingPool)
         .map(m => ({
             ...m,
-            score: (roomData && roomData.votes[m.id]) ? roomData.votes[m.id] : 0
+            score: (roomState && roomState.votes[m.id]) ? roomState.votes[m.id] : 0
         }))
         .sort((a, b) => b.score - a.score);
 
@@ -329,7 +373,7 @@ function showGroupFinalResults() {
 }
 
 function leaveRoom() {
-    clearInterval(lobbySyncInterval);
+    disconnectWS();
     goHome();
 }
 

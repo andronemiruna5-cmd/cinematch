@@ -1,3 +1,5 @@
+const OFFICIAL_URL = "https://andronemiruna5-cmd.github.io/cinematch/";
+
 const moviesDatabase = [
     // Acțiune
     { id: 1, title: "The Dark Knight", genre: "Action", year: 2008, match: "96%", desc: "Batman își testează limitele împotriva unui nou geniu al crimei: Jokerul." },
@@ -60,12 +62,14 @@ let votingPool = [];
 let groupMovieIndex = 0;
 let myVotes = {};
 let lobbySyncInterval = null;
+let joinedViaLink = false;
 
-// Verificăm la pornire dacă s-a intrat direct printr-un link ?room=CINE-XXXX
+// Verificăm la pornire dacă s-a intrat direct printr-un link / QR ?room=CINE-XXXX
 window.onload = function() {
     const params = new URLSearchParams(window.location.search);
     const roomParam = params.get("room");
     if (roomParam) {
+        joinedViaLink = true;
         openRoomChoice();
         document.getElementById("join-code-input").value = roomParam.toUpperCase();
     }
@@ -103,7 +107,6 @@ function createRoom() {
     const randomNum = Math.floor(1000 + Math.random() * 9000);
     currentRoomCode = "CINE-" + randomNum;
 
-    // Selectăm 8 filme variate din toate genurile pentru sesiunea de vot
     const shuffled = [...moviesDatabase].sort(() => 0.5 - Math.random()).slice(0, 8);
 
     const roomData = {
@@ -111,7 +114,7 @@ function createRoom() {
         status: "waiting",
         players: [{ name: currentPlayerName, isHost: true, done: false }],
         movies: shuffled,
-        votes: {} // { movieId: count }
+        votes: {}
     };
 
     saveRoomData(currentRoomCode, roomData);
@@ -131,21 +134,38 @@ function joinRoom() {
     isHost = false;
     currentRoomCode = codeInput;
 
-    // Verificăm dacă camera Chiar Există în sistem
     let roomData = getRoomData(currentRoomCode);
 
+    // Dacă intră de pe alt telefon prin link/QR-ul oficial, inițializăm sesiunea pentru acel cod
     if (!roomData) {
-        alert("❌ Această cameră nu există sau nu a fost creată încă de gazdă!");
-        return; // Oprim execuția și nu lăsăm utilizatorul să intre
+        const params = new URLSearchParams(window.location.search);
+        const urlRoom = (params.get("room") || "").toUpperCase().replace("#", "");
+        
+        if (joinedViaLink && urlRoom === currentRoomCode) {
+            const defaultMovies = [...moviesDatabase].slice(0, 8);
+            roomData = {
+                code: currentRoomCode,
+                status: "voting", // Pe alt telefon fără backend, poate vota imediat
+                players: [{ name: "Gazdă", isHost: true, done: false }],
+                movies: defaultMovies,
+                votes: {}
+            };
+        } else {
+            alert("❌ Această cameră nu există sau nu a fost creată încă de gazdă!");
+            return;
+        }
     }
 
-    // Adăugăm jucătorul în cameră dacă nu este deja adăugat
     if (!roomData.players.some(p => p.name === currentPlayerName)) {
         roomData.players.push({ name: currentPlayerName, isHost: false, done: false });
         saveRoomData(currentRoomCode, roomData);
     }
 
-    enterLobby();
+    if (roomData.status === "voting") {
+        beginGroupVoting(roomData.movies);
+    } else {
+        enterLobby();
+    }
 }
 
 function enterLobby() {
@@ -153,16 +173,15 @@ function enterLobby() {
     document.getElementById("lobby-room-code").innerText = "#" + currentRoomCode;
     document.getElementById("vip-room-code").innerText = "#" + currentRoomCode;
 
-    // QR-ul pointează STRICT către adresa aplicației TALE + codul camerei
-    const baseUrl = window.location.href.split('?')[0];
-    const roomUrl = `${baseUrl}?room=${currentRoomCode}`;
+    // QR-ul folosește STRICT adresa oficială GitHub Pages + codul camerei
+    const roomUrl = `${OFFICIAL_URL}?room=${currentRoomCode}`;
 
     const qrContainer = document.getElementById("qrcode-box");
     qrContainer.innerHTML = "";
     new QRCode(qrContainer, {
         text: roomUrl,
-        width: 130,
-        height: 130,
+        width: 140,
+        height: 140,
         colorDark: "#09090b",
         colorLight: "#ffffff",
         correctLevel: QRCode.CorrectLevel.H
@@ -210,7 +229,6 @@ function updateLobbyUI() {
     document.getElementById("players-count").innerText = roomData.players.length;
 }
 
-// Buton util dacă vrei să testezi rapid cu prieteni simulați pe același ecran
 function addDemoFriend() {
     const roomData = getRoomData(currentRoomCode);
     if (!roomData) return;
@@ -218,7 +236,6 @@ function addDemoFriend() {
     const nextName = demoNames[(roomData.players.length - 1) % demoNames.length];
     
     roomData.players.push({ name: nextName, isHost: false, done: true, isBot: true });
-    // Botul votează aleator câteva filme
     roomData.movies.forEach(m => {
         if (Math.random() > 0.45) {
             roomData.votes[m.id] = (roomData.votes[m.id] || 0) + 1;
@@ -389,9 +406,8 @@ function openVipTicket() {
 }
 
 function sendWhatsAppInvite() {
-    const code = currentRoomCode || "CINE-8821";
-    const baseUrl = window.location.href.split('?')[0];
-    const inviteLink = `${baseUrl}?room=${code}`;
+    const code = (currentRoomCode || "CINE-8821").replace('#', '');
+    const inviteLink = `${OFFICIAL_URL}?room=${code}`;
     const inviteText = `🍿 Salut! Intră în camera mea CineMatch să votăm filmul pentru seara asta!\nCod cameră: #${code}\nLink direct: ${inviteLink}`;
     
     const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(inviteText)}`;

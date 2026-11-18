@@ -54,21 +54,18 @@ const questions = [
 let currentQ = 0;
 let userAnswers = [];
 
-// Variabile pentru Camera Gașcă
 let currentRoomCode = "";
 let currentPlayerName = "";
 let isHost = false;
 let votingPool = [];
 let groupMovieIndex = 0;
 let myVotes = {};
-let lobbySyncInterval = null;
-let joinedViaLink = false;
+let syncInterval = null;
 
 window.onload = function() {
     const params = new URLSearchParams(window.location.search);
     const roomParam = params.get("room");
     if (roomParam) {
-        joinedViaLink = true;
         openRoomChoice();
         document.getElementById("join-code-input").value = roomParam.toUpperCase();
     }
@@ -80,11 +77,10 @@ function showScreen(screenId) {
 }
 
 function goHome() {
-    clearInterval(lobbySyncInterval);
+    clearInterval(syncInterval);
     showScreen('home-screen');
 }
 
-// --- MODUL CAMERĂ GAȘCĂ ---
 function openRoomChoice() {
     showScreen('room-choice-screen');
 }
@@ -98,6 +94,7 @@ function saveRoomData(code, data) {
     localStorage.setItem("cinematch_room_" + code, JSON.stringify(data));
 }
 
+// --- CREARE CAMERĂ (GAZDĂ) ---
 function createRoom() {
     const nameInput = document.getElementById("player-name-input").value.trim();
     currentPlayerName = nameInput || "Gazda";
@@ -110,8 +107,8 @@ function createRoom() {
 
     const roomData = {
         code: currentRoomCode,
-        status: "waiting",
-        players: [{ name: currentPlayerName, isHost: true, done: false }],
+        status: "waiting", // waiting, voting, results
+        players: [{ name: currentPlayerName, isHost: true, approved: true, done: false }],
         movies: shuffled,
         votes: {}
     };
@@ -120,6 +117,7 @@ function createRoom() {
     enterLobby();
 }
 
+// --- INTRARE ÎN CAMERĂ (INVITAT) ---
 function joinRoom() {
     const nameInput = document.getElementById("player-name-input").value.trim();
     let codeInput = document.getElementById("join-code-input").value.trim().toUpperCase().replace("#", "");
@@ -134,35 +132,45 @@ function joinRoom() {
     currentRoomCode = codeInput;
 
     let roomData = getRoomData(currentRoomCode);
-
-    // Dacă se intră de pe alt telefon prin link/QR, nu blocăm utilizatorul în așteptare
     if (!roomData) {
-        const defaultMovies = [...moviesDatabase].slice(0, 8);
-        roomData = {
-            code: currentRoomCode,
-            status: "voting",
-            players: [
-                { name: "Gazdă", isHost: true, done: false },
-                { name: currentPlayerName, isHost: false, done: false }
-            ],
-            movies: defaultMovies,
-            votes: {}
-        };
-        saveRoomData(currentRoomCode, roomData);
-        beginGroupVoting(roomData.movies);
+        alert("❌ Această cameră nu există! Asigură-te că gazda a creat-o.");
         return;
     }
 
-    if (!roomData.players.some(p => p.name === currentPlayerName)) {
-        roomData.players.push({ name: currentPlayerName, isHost: false, done: false });
+    // Verificăm dacă jucătorul este deja în listă
+    let existingPlayer = roomData.players.find(p => p.name === currentPlayerName);
+    if (!existingPlayer) {
+        roomData.players.push({ name: currentPlayerName, isHost: false, approved: false, done: false });
         saveRoomData(currentRoomCode, roomData);
     }
 
-    if (roomData.status === "voting") {
-        beginGroupVoting(roomData.movies);
-    } else {
-        enterLobby();
-    }
+    // Îi arătăm ecranul de așteptare până când gazda dă Accept
+    showWaitingForApprovalScreen();
+}
+
+function showWaitingForApprovalScreen() {
+    showScreen('lobby-screen');
+    // Ascundem elementele de gazdă și afișăm mesajul că așteaptă aprobarea
+    document.getElementById("btn-start-group").classList.add("hidden");
+    document.getElementById("waiting-host-msg").classList.remove("hidden");
+    document.getElementById("waiting-host-msg").innerText = "⏳ Aștepți ca gazda să te aprobe în cameră...";
+    document.getElementById("lobby-room-code").innerText = "#" + currentRoomCode;
+
+    clearInterval(syncInterval);
+    syncInterval = setInterval(() => {
+        const roomData = getRoomData(currentRoomCode);
+        if (!roomData) return;
+
+        const me = roomData.players.find(p => p.name === currentPlayerName);
+        if (me && me.approved) {
+            clearInterval(syncInterval);
+            if (roomData.status === "voting") {
+                beginGroupVoting(roomData.movies);
+            } else {
+                enterLobby();
+            }
+        }
+    }, 1000);
 }
 
 function enterLobby() {
@@ -171,7 +179,6 @@ function enterLobby() {
     document.getElementById("vip-room-code").innerText = "#" + currentRoomCode;
 
     const roomUrl = `${OFFICIAL_URL}?room=${currentRoomCode}`;
-
     const qrContainer = document.getElementById("qrcode-box");
     qrContainer.innerHTML = "";
     new QRCode(qrContainer, {
@@ -186,57 +193,71 @@ function enterLobby() {
     if (isHost) {
         document.getElementById("btn-start-group").classList.remove("hidden");
         document.getElementById("waiting-host-msg").classList.add("hidden");
-    } else {
-        document.getElementById("btn-start-group").classList.add("hidden");
-        document.getElementById("waiting-host-msg").classList.remove("hidden");
     }
 
     updateLobbyUI();
-    clearInterval(lobbySyncInterval);
-    lobbySyncInterval = setInterval(syncLobbyState, 600);
+    clearInterval(syncInterval);
+    syncInterval = setInterval(syncHostLobby, 1000);
 }
 
-function syncLobbyState() {
+function syncHostLobby() {
     const roomData = getRoomData(currentRoomCode);
     if (!roomData) return;
 
     updateLobbyUI();
 
     if (roomData.status === "voting") {
-        clearInterval(lobbySyncInterval);
+        clearInterval(syncInterval);
         beginGroupVoting(roomData.movies);
     }
 }
 
+// --- ACTUALIZARE LISTĂ CU BUTOANE DE APROBARE PENTRU GAZDĂ ---
 function updateLobbyUI() {
     const roomData = getRoomData(currentRoomCode);
     if (!roomData) return;
 
     const list = document.getElementById("players-list");
     list.innerHTML = "";
-    roomData.players.forEach(p => {
+    
+    roomData.players.forEach((p, idx) => {
+        let statusBadge = "";
+        if (p.isHost) {
+            statusBadge = '<span class="host-tag">GAZDĂ</span>';
+        } else if (p.approved) {
+            statusBadge = '<span style="color:#4ade80; font-size:0.85rem; font-weight:bold;">✔ Aprobat</span>';
+        } else if (isHost) {
+            // Gazda vede butoane de Accept / Refuz pentru cei în așteptare
+            statusBadge = `
+                <button onclick="approvePlayer(${idx})" style="background:#10b981; color:white; border:none; padding:3px 8px; border-radius:4px; cursor:pointer; font-size:0.75rem; margin-right:5px;">Acceptă</button>
+                <button onclick="rejectPlayer(${idx})" style="background:#ef4444; color:white; border:none; padding:3px 8px; border-radius:4px; cursor:pointer; font-size:0.75rem;">Respinge</button>
+            `;
+        } else {
+            statusBadge = '<span style="color:#fbbf24; font-size:0.8rem;">În așteptare...</span>';
+        }
+
         list.innerHTML += `
-            <li>
+            <li style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                 <span>👤 ${p.name}</span>
-                ${p.isHost ? '<span class="host-tag">GAZDĂ</span>' : '<span style="color:#4ade80; font-size:0.8rem;">Conectat</span>'}
+                <div>${statusBadge}</div>
             </li>
         `;
     });
-    document.getElementById("players-count").innerText = roomData.players.length;
+    document.getElementById("players-count").innerText = roomData.players.filter(p => p.approved).length;
 }
 
-function addDemoFriend() {
+function approvePlayer(index) {
     const roomData = getRoomData(currentRoomCode);
     if (!roomData) return;
-    const demoNames = ["Andrei", "Elena", "Alex", "Ioana", "Vlad"];
-    const nextName = demoNames[(roomData.players.length - 1) % demoNames.length];
-    
-    roomData.players.push({ name: nextName, isHost: false, done: true, isBot: true });
-    roomData.movies.forEach(m => {
-        if (Math.random() > 0.45) {
-            roomData.votes[m.id] = (roomData.votes[m.id] || 0) + 1;
-        }
-    });
+    roomData.players[index].approved = true;
+    saveRoomData(currentRoomCode, roomData);
+    updateLobbyUI();
+}
+
+function rejectPlayer(index) {
+    const roomData = getRoomData(currentRoomCode);
+    if (!roomData) return;
+    roomData.players.splice(index, 1);
     saveRoomData(currentRoomCode, roomData);
     updateLobbyUI();
 }
@@ -246,7 +267,7 @@ function hostStartVoting() {
     if (!roomData) return;
     roomData.status = "voting";
     saveRoomData(currentRoomCode, roomData);
-    clearInterval(lobbySyncInterval);
+    clearInterval(syncInterval);
     beginGroupVoting(roomData.movies);
 }
 
@@ -300,7 +321,7 @@ function showGroupFinalResults() {
     const container = document.getElementById("group-ranking-container");
     container.innerHTML = "";
 
-    const totalPlayers = roomData ? roomData.players.length : 1;
+    const totalPlayers = roomData ? roomData.players.filter(p => p.approved).length : 1;
     const ranked = (roomData ? roomData.movies : votingPool)
         .map(m => ({
             ...m,
@@ -325,7 +346,7 @@ function showGroupFinalResults() {
 }
 
 function leaveRoom() {
-    clearInterval(lobbySyncInterval);
+    clearInterval(syncInterval);
     goHome();
 }
 

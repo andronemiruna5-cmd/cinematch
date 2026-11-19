@@ -1,4 +1,5 @@
 const OFFICIAL_URL = "https://andronemiruna5-cmd.github.io/cinematch/";
+const WS_BROKER = "wss://broker.emqx.io:8084/mqtt";
 
 const moviesDatabase = [
     // Acțiune
@@ -54,30 +55,38 @@ const questions = [
 let currentQ = 0;
 let userAnswers = [];
 
+// Stare cameră & WebSocket
+let wsClient = null;
+let roomTopic = "";
 let currentRoomCode = "";
+let currentPlayerId = "";
 let currentPlayerName = "";
 let isHost = false;
+let myApprovalStatus = "pending"; // "pending" | "approved" | "rejected"
+let roomState = null;
 let votingPool = [];
 let groupMovieIndex = 0;
 let myVotes = {};
-let syncInterval = null;
+let hostRequestTimeout = null;
 
 window.onload = function() {
     const params = new URLSearchParams(window.location.search);
     const roomParam = params.get("room");
     if (roomParam) {
         openRoomChoice();
-        document.getElementById("join-code-input").value = roomParam.toUpperCase();
+        const joinInput = document.getElementById("join-code-input");
+        if (joinInput) joinInput.value = roomParam.toUpperCase();
     }
 };
 
 function showScreen(screenId) {
     document.querySelectorAll('.card').forEach(c => c.classList.add('hidden'));
-    document.getElementById(screenId).classList.remove('hidden');
+    const target = document.getElementById(screenId);
+    if (target) target.classList.remove('hidden');
 }
 
 function goHome() {
-    clearInterval(syncInterval);
+    disconnectWS();
     showScreen('home-screen');
 }
 
@@ -85,39 +94,169 @@ function openRoomChoice() {
     showScreen('room-choice-screen');
 }
 
-function getRoomData(code) {
-    const raw = localStorage.getItem("cinematch_room_" + code);
-    return raw ? JSON.parse(raw) : null;
+function disconnectWS() {
+    if (hostRequestTimeout) {
+        clearTimeout(hostRequestTimeout);
+        hostRequestTimeout = null;
+    }
+    if (wsClient) {
+        try {
+            wsClient.end(true);
+        } catch (e) {}
+        wsClient = null;
+    }
 }
 
-function saveRoomData(code, data) {
-    localStorage.setItem("cinematch_room_" + code, JSON.stringify(data));
+function connectToRoomWS(code, onConnected) {
+    disconnectWS();
+    roomTopic = `cinematch_live_2026/room/${code}`;
+    const clientId = "cm_" + Math.random().toString(16).slice(2, 10);
+
+    wsClient = mqtt.connect(WS_BROKER, {
+        clientId: clientId,
+        clean: true,
+        connectTimeout: 6000,
+        reconnectPeriod: 2000
+    });
+
+    wsClient.on("connect", () => {
+        wsClient.subscribe(roomTopic, { qos: 1 }, (err) => {
+            if (!err && onConnected) onConnected();
+        });
+    });
+
+    wsClient.on("message", (topic, payload) => {
+        if (topic !== roomTopic) return;
+        try {
+            const msg = JSON.parse(payload.toString());
+            handleWSMessage(msg);
+        } catch (err) {
+            console.error("Eroare parsare mesaj WS:", err);
+        }
+    });
+
+    wsClient.on("error", (err) => {
+        console.error("Eroare conexiune WS:", err);
+    });
+}
+
+function sendWS(msg) {
+    if (wsClient && wsClient.connected) {
+        wsClient.publish(roomTopic, JSON.stringify(msg), { qos: 1 });
+    }
+}
+
+function handleWSMessage(msg) {
+    if (!msg || !msg.type) return;
+
+    // 1. Gazda primește cerere de la un participant nou
+    if (msg.type === "JOIN_REQUEST" && isHost && roomState) {
+        const exists = roomState.players.some(p => p.id === msg.playerId);
+        if (!exists) {
+            roomState.players.push({
+                id: msg.playerId,
+                name: msg.name,
+                isHost: false,
+                status: "pending",
+                done: false
+            });
+        }
+        updateLobbyUI();
+        sendWS({ type: "ROOM_SYNC", state: roomState });
+    }
+
+    // 2. Sincronizare generală a camerei
+    if (msg.type === "ROOM_SYNC" && msg.state) {
+        const prevStatus = roomState ? roomState.status : "waiting";
+        roomState = msg.state;
+
+        if (!isHost) {
+            const me = roomState.players.find(p => p.id === currentPlayerId);
+            if (me) {
+                myApprovalStatus = me.status;
+                if (me.status === "rejected") {
+                    disconnectWS();
+                    alert("Gazda a respins cererea de intrare în cameră.");
+                    openRoomChoice();
+                    return;
+                }
+            }
+
+            if (myApprovalStatus === "pending") {
+                showPendingApprovalScreen();
+                return;
+            }
+
+            if (myApprovalStatus === "approved") {
+                if (roomState.status === "waiting") {
+                    renderApprovedLobby();
+                } else if (roomState.status === "voting" && prevStatus !== "voting") {
+                    beginGroupVoting(roomState.movies);
+                } else if (roomState.status === "voting" && !document.getElementById("group-result-screen").classList.contains("hidden")) {
+                    showGroupFinalResults();
+                }
+            }
+        } else {
+            updateLobbyUI();
+            if (roomState.status === "voting" && !document.getElementById("group-result-screen").classList.contains("hidden")) {
+                showGroupFinalResults();
+            }
+        }
+    }
+
+    // 3. Gazda primește voturile unui participant
+    if (msg.type === "SUBMIT_VOTES" && isHost && roomState) {
+        if (msg.votes && typeof msg.votes === "object") {
+            Object.keys(msg.votes).forEach(movieId => {
+                if (msg.votes[movieId]) {
+                    roomState.votes[movieId] = (roomState.votes[movieId] || 0) + 1;
+                }
+            });
+        }
+        const player = roomState.players.find(p => p.id === msg.playerId);
+        if (player) player.done = true;
+
+        sendWS({ type: "ROOM_SYNC", state: roomState });
+        if (!document.getElementById("group-result-screen").classList.contains("hidden")) {
+            showGroupFinalResults();
+        }
+    }
 }
 
 // --- CREARE CAMERĂ (GAZDĂ) ---
 function createRoom() {
     const nameInput = document.getElementById("player-name-input").value.trim();
     currentPlayerName = nameInput || "Gazda";
+    currentPlayerId = "host_" + Math.random().toString(16).slice(2, 8);
     isHost = true;
+    myApprovalStatus = "approved";
 
     const randomNum = Math.floor(1000 + Math.random() * 9000);
     currentRoomCode = "CINE-" + randomNum;
 
     const shuffled = [...moviesDatabase].sort(() => 0.5 - Math.random()).slice(0, 8);
 
-    const roomData = {
+    roomState = {
         code: currentRoomCode,
-        status: "waiting", // waiting, voting, results
-        players: [{ name: currentPlayerName, isHost: true, approved: true, done: false }],
+        status: "waiting",
+        players: [{
+            id: currentPlayerId,
+            name: currentPlayerName,
+            isHost: true,
+            status: "approved",
+            done: false
+        }],
         movies: shuffled,
         votes: {}
     };
 
-    saveRoomData(currentRoomCode, roomData);
-    enterLobby();
+    connectToRoomWS(currentRoomCode, () => {
+        renderApprovedLobby();
+        sendWS({ type: "ROOM_SYNC", state: roomState });
+    });
 }
 
-// --- INTRARE ÎN CAMERĂ (INVITAT) ---
+// --- CERERE INTRARE ÎN CAMERĂ (PARTICIPANT) ---
 function joinRoom() {
     const nameInput = document.getElementById("player-name-input").value.trim();
     let codeInput = document.getElementById("join-code-input").value.trim().toUpperCase().replace("#", "");
@@ -128,55 +267,64 @@ function joinRoom() {
     }
 
     currentPlayerName = nameInput || "Invitat";
+    currentPlayerId = "p_" + Math.random().toString(16).slice(2, 8);
     isHost = false;
+    myApprovalStatus = "pending";
     currentRoomCode = codeInput;
+    roomState = null;
 
-    let roomData = getRoomData(currentRoomCode);
-    if (!roomData) {
-        alert("❌ Această cameră nu există! Asigură-te că gazda a creat-o.");
-        return;
-    }
+    showPendingApprovalScreen();
 
-    // Verificăm dacă jucătorul este deja în listă
-    let existingPlayer = roomData.players.find(p => p.name === currentPlayerName);
-    if (!existingPlayer) {
-        roomData.players.push({ name: currentPlayerName, isHost: false, approved: false, done: false });
-        saveRoomData(currentRoomCode, roomData);
-    }
+    connectToRoomWS(currentRoomCode, () => {
+        sendWS({
+            type: "JOIN_REQUEST",
+            playerId: currentPlayerId,
+            name: currentPlayerName
+        });
 
-    // Îi arătăm ecranul de așteptare până când gazda dă Accept
-    showWaitingForApprovalScreen();
-}
-
-function showWaitingForApprovalScreen() {
-    showScreen('lobby-screen');
-    // Ascundem elementele de gazdă și afișăm mesajul că așteaptă aprobarea
-    document.getElementById("btn-start-group").classList.add("hidden");
-    document.getElementById("waiting-host-msg").classList.remove("hidden");
-    document.getElementById("waiting-host-msg").innerText = "⏳ Aștepți ca gazda să te aprobe în cameră...";
-    document.getElementById("lobby-room-code").innerText = "#" + currentRoomCode;
-
-    clearInterval(syncInterval);
-    syncInterval = setInterval(() => {
-        const roomData = getRoomData(currentRoomCode);
-        if (!roomData) return;
-
-        const me = roomData.players.find(p => p.name === currentPlayerName);
-        if (me && me.approved) {
-            clearInterval(syncInterval);
-            if (roomData.status === "voting") {
-                beginGroupVoting(roomData.movies);
-            } else {
-                enterLobby();
+        hostRequestTimeout = setTimeout(() => {
+            if (!roomState && myApprovalStatus === "pending") {
+                disconnectWS();
+                alert("Nu s-a găsit nicio cameră activă cu codul #" + currentRoomCode + " sau conexiunea a fost blocată.");
+                openRoomChoice();
             }
-        }
-    }, 1000);
+        }, 6000);
+    });
 }
 
-function enterLobby() {
+function showPendingApprovalScreen() {
+    if (hostRequestTimeout) {
+        clearTimeout(hostRequestTimeout);
+        hostRequestTimeout = null;
+    }
     showScreen('lobby-screen');
     document.getElementById("lobby-room-code").innerText = "#" + currentRoomCode;
-    document.getElementById("vip-room-code").innerText = "#" + currentRoomCode;
+
+    const qrBox = document.getElementById("qrcode-box");
+    if (qrBox) qrBox.innerHTML = "";
+
+    const startBtn = document.getElementById("btn-start-group");
+    if (startBtn) startBtn.classList.add("hidden");
+
+    const waitMsg = document.getElementById("waiting-host-msg");
+    if (waitMsg) {
+        waitMsg.classList.remove("hidden");
+        waitMsg.innerText = "⏳ Cererea ta a fost trimisă. Aștepți aprobarea gazdei...";
+    }
+
+    const list = document.getElementById("players-list");
+    if (list) {
+        list.innerHTML = `<li><span>⏳ ${currentPlayerName}</span><span style="color:#fbbf24; font-size:0.85rem;">În așteptarea gazdei</span></li>`;
+    }
+    const countEl = document.getElementById("players-count");
+    if (countEl) countEl.innerText = "0";
+}
+
+function renderApprovedLobby() {
+    showScreen('lobby-screen');
+    document.getElementById("lobby-room-code").innerText = "#" + currentRoomCode;
+    const vipCode = document.getElementById("vip-room-code");
+    if (vipCode) vipCode.innerText = "#" + currentRoomCode;
 
     const roomUrl = `${OFFICIAL_URL}?room=${currentRoomCode}`;
     const qrContainer = document.getElementById("qrcode-box");
@@ -190,93 +338,94 @@ function enterLobby() {
         correctLevel: QRCode.CorrectLevel.H
     });
 
+    const startBtn = document.getElementById("btn-start-group");
+    const waitMsg = document.getElementById("waiting-host-msg");
+
     if (isHost) {
-        document.getElementById("btn-start-group").classList.remove("hidden");
-        document.getElementById("waiting-host-msg").classList.add("hidden");
+        if (startBtn) startBtn.classList.remove("hidden");
+        if (waitMsg) waitMsg.classList.add("hidden");
+    } else {
+        if (startBtn) startBtn.classList.add("hidden");
+        if (waitMsg) {
+            waitMsg.classList.remove("hidden");
+            waitMsg.innerText = "✅ Ai fost acceptat în cameră! Așteaptă ca gazda să dea START.";
+        }
     }
 
     updateLobbyUI();
-    clearInterval(syncInterval);
-    syncInterval = setInterval(syncHostLobby, 1000);
 }
 
-function syncHostLobby() {
-    const roomData = getRoomData(currentRoomCode);
-    if (!roomData) return;
-
-    updateLobbyUI();
-
-    if (roomData.status === "voting") {
-        clearInterval(syncInterval);
-        beginGroupVoting(roomData.movies);
-    }
-}
-
-// --- ACTUALIZARE LISTĂ CU BUTOANE DE APROBARE PENTRU GAZDĂ ---
 function updateLobbyUI() {
-    const roomData = getRoomData(currentRoomCode);
-    if (!roomData) return;
-
+    if (!roomState) return;
     const list = document.getElementById("players-list");
+    if (!list) return;
+
     list.innerHTML = "";
-    
-    roomData.players.forEach((p, idx) => {
-        let statusBadge = "";
+    const approvedPlayers = roomState.players.filter(p => p.status === "approved");
+
+    roomState.players.forEach(p => {
+        if (p.status === "rejected") return;
+
+        let rightContent = "";
         if (p.isHost) {
-            statusBadge = '<span class="host-tag">GAZDĂ</span>';
-        } else if (p.approved) {
-            statusBadge = '<span style="color:#4ade80; font-size:0.85rem; font-weight:bold;">✔ Aprobat</span>';
-        } else if (isHost) {
-            // Gazda vede butoane de Accept / Refuz pentru cei în așteptare
-            statusBadge = `
-                <button onclick="approvePlayer(${idx})" style="background:#10b981; color:white; border:none; padding:3px 8px; border-radius:4px; cursor:pointer; font-size:0.75rem; margin-right:5px;">Acceptă</button>
-                <button onclick="rejectPlayer(${idx})" style="background:#ef4444; color:white; border:none; padding:3px 8px; border-radius:4px; cursor:pointer; font-size:0.75rem;">Respinge</button>
+            rightContent = '<span class="host-tag">GAZDĂ</span>';
+        } else if (p.status === "approved") {
+            rightContent = '<span style="color:#4ade80; font-size:0.85rem; font-weight:bold;">✔ În cameră</span>';
+        } else if (isHost && p.status === "pending") {
+            rightContent = `
+                <button onclick="approvePlayer('${p.id}')" style="background:#10b981; color:white; border:none; padding:4px 9px; border-radius:6px; cursor:pointer; font-size:0.75rem; margin-right:6px;">Acceptă</button>
+                <button onclick="rejectPlayer('${p.id}')" style="background:#ef4444; color:white; border:none; padding:4px 9px; border-radius:6px; cursor:pointer; font-size:0.75rem;">Respinge</button>
             `;
         } else {
-            statusBadge = '<span style="color:#fbbf24; font-size:0.8rem;">În așteptare...</span>';
+            rightContent = '<span style="color:#fbbf24; font-size:0.8rem;">În așteptare...</span>';
         }
 
         list.innerHTML += `
             <li style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                 <span>👤 ${p.name}</span>
-                <div>${statusBadge}</div>
+                <div>${rightContent}</div>
             </li>
         `;
     });
-    document.getElementById("players-count").innerText = roomData.players.filter(p => p.approved).length;
+
+    const countEl = document.getElementById("players-count");
+    if (countEl) countEl.innerText = approvedPlayers.length;
 }
 
-function approvePlayer(index) {
-    const roomData = getRoomData(currentRoomCode);
-    if (!roomData) return;
-    roomData.players[index].approved = true;
-    saveRoomData(currentRoomCode, roomData);
-    updateLobbyUI();
+function approvePlayer(playerId) {
+    if (!isHost || !roomState) return;
+    const target = roomState.players.find(p => p.id === playerId);
+    if (target) {
+        target.status = "approved";
+        updateLobbyUI();
+        sendWS({ type: "ROOM_SYNC", state: roomState });
+    }
 }
 
-function rejectPlayer(index) {
-    const roomData = getRoomData(currentRoomCode);
-    if (!roomData) return;
-    roomData.players.splice(index, 1);
-    saveRoomData(currentRoomCode, roomData);
-    updateLobbyUI();
+function rejectPlayer(playerId) {
+    if (!isHost || !roomState) return;
+    const target = roomState.players.find(p => p.id === playerId);
+    if (target) {
+        target.status = "rejected";
+        updateLobbyUI();
+        sendWS({ type: "ROOM_SYNC", state: roomState });
+    }
 }
 
 function hostStartVoting() {
-    const roomData = getRoomData(currentRoomCode);
-    if (!roomData) return;
-    roomData.status = "voting";
-    saveRoomData(currentRoomCode, roomData);
-    clearInterval(syncInterval);
-    beginGroupVoting(roomData.movies);
+    if (!isHost || !roomState) return;
+    roomState.status = "voting";
+    sendWS({ type: "ROOM_SYNC", state: roomState });
+    beginGroupVoting(roomState.movies);
 }
 
 function beginGroupVoting(movies) {
-    votingPool = movies;
+    votingPool = movies || [];
     groupMovieIndex = 0;
     myVotes = {};
     showScreen('group-voting-screen');
-    document.getElementById("voting-player-label").innerHTML = `Votezi ca: <strong>${currentPlayerName}</strong>`;
+    const label = document.getElementById("voting-player-label");
+    if (label) label.innerHTML = `Votezi ca: <strong>${currentPlayerName}</strong>`;
     loadGroupMovie();
 }
 
@@ -295,7 +444,7 @@ function loadGroupMovie() {
 
 function voteMovie(liked) {
     const m = votingPool[groupMovieIndex];
-    if (liked) {
+    if (m && liked) {
         myVotes[m.id] = 1;
     }
     groupMovieIndex++;
@@ -303,40 +452,64 @@ function voteMovie(liked) {
 }
 
 function submitGroupVotes() {
-    const roomData = getRoomData(currentRoomCode);
-    if (roomData) {
+    if (isHost && roomState) {
         Object.keys(myVotes).forEach(id => {
-            roomData.votes[id] = (roomData.votes[id] || 0) + 1;
+            if (myVotes[id]) {
+                roomState.votes[id] = (roomState.votes[id] || 0) + 1;
+            }
         });
-        const me = roomData.players.find(p => p.name === currentPlayerName);
+        const me = roomState.players.find(p => p.id === currentPlayerId);
         if (me) me.done = true;
-        saveRoomData(currentRoomCode, roomData);
+        sendWS({ type: "ROOM_SYNC", state: roomState });
+    } else {
+        sendWS({
+            type: "SUBMIT_VOTES",
+            playerId: currentPlayerId,
+            player: currentPlayerName,
+            votes: myVotes
+        });
+        if (roomState) {
+            Object.keys(myVotes).forEach(id => {
+                if (myVotes[id]) {
+                    roomState.votes[id] = (roomState.votes[id] || 0) + 1;
+                }
+            });
+        }
     }
     showGroupFinalResults();
 }
 
 function showGroupFinalResults() {
     showScreen('group-result-screen');
-    const roomData = getRoomData(currentRoomCode);
     const container = document.getElementById("group-ranking-container");
+    if (!container) return;
     container.innerHTML = "";
 
-    const totalPlayers = roomData ? roomData.players.filter(p => p.approved).length : 1;
-    const ranked = (roomData ? roomData.movies : votingPool)
+    const approvedCount = roomState
+        ? Math.max(1, roomState.players.filter(p => p.status === "approved").length)
+        : 1;
+
+    const pool = (roomState && roomState.movies && roomState.movies.length) ? roomState.movies : votingPool;
+
+    const ranked = pool
         .map(m => ({
             ...m,
-            score: (roomData && roomData.votes[m.id]) ? roomData.votes[m.id] : 0
+            score: (roomState && roomState.votes && roomState.votes[m.id]) ? roomState.votes[m.id] : 0
         }))
         .sort((a, b) => b.score - a.score);
 
     ranked.forEach((m, index) => {
-        const percent = Math.round((m.score / totalPlayers) * 100);
-        const badgeText = index === 0 && m.score > 0 ? `🏆 CÂȘTIGĂTOR (${m.score}/${totalPlayers} voturi)` : `${m.score}/${totalPlayers} voturi (${percent}%)`;
+        const percent = Math.round((m.score / approvedCount) * 100);
+        const isWinner = index === 0 && m.score > 0;
+        const badgeText = isWinner
+            ? `🏆 RĂSPUNS FINAL / CÂȘTIGĂTOR (${m.score}/${approvedCount} voturi)`
+            : `${m.score}/${approvedCount} voturi (${percent}%)`;
+
         container.innerHTML += `
-            <div class="movie-item" style="${index === 0 ? 'border-left-color: #fbbf24;' : ''}">
+            <div class="movie-item" style="${isWinner ? 'border-left-color: #fbbf24;' : ''}">
                 <div class="movie-header">
                     <span class="movie-title">${m.title}</span>
-                    <span class="match-badge" style="${index === 0 ? 'background:#d97706;' : ''}">${badgeText}</span>
+                    <span class="match-badge" style="${isWinner ? 'background:#d97706;' : ''}">${badgeText}</span>
                 </div>
                 <div class="movie-meta">An: ${m.year} | Gen: ${m.genre}</div>
                 <div class="movie-desc">${m.desc}</div>
@@ -346,7 +519,7 @@ function showGroupFinalResults() {
 }
 
 function leaveRoom() {
-    clearInterval(syncInterval);
+    disconnectWS();
     goHome();
 }
 

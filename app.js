@@ -390,12 +390,15 @@ function renderApprovedLobby() {
 
     const startBtn = document.getElementById("btn-start-group");
     const waitMsg = document.getElementById("waiting-host-msg");
+    const waBtn = document.querySelector("#lobby-screen .btn-whatsapp");
 
     if (isHost) {
         if (startBtn) startBtn.classList.remove("hidden");
         if (waitMsg) waitMsg.classList.add("hidden");
+        if (waBtn) waBtn.classList.remove("hidden");
     } else {
         if (startBtn) startBtn.classList.add("hidden");
+        if (waBtn) waBtn.classList.add("hidden");
         if (waitMsg) {
             waitMsg.classList.remove("hidden");
             waitMsg.innerText = "✅ Ai fost acceptat în cameră! Așteaptă ca gazda să dea START.";

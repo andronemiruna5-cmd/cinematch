@@ -2,49 +2,59 @@ const OFFICIAL_URL = "https://andronemiruna5-cmd.github.io/cinematch/";
 const WS_BROKER = "wss://broker.emqx.io:8084/mqtt";
 
 const moviesDatabase = [
-    // Acțiune
-    { id: 1, title: "The Dark Knight", genre: "Action", year: 2008, match: "96%", desc: "Batman își testează limitele împotriva unui nou geniu al crimei: Jokerul." },
-    { id: 2, title: "Gladiator", genre: "Action", year: 2000, match: "93%", desc: "Un fost general roman caută răzbunare împotriva împăratului corupt." },
-    { id: 3, title: "The Hunger Games", genre: "Action", year: 2012, match: "91%", desc: "Luptă pentru supraviețuire într-o distopie implacabilă." },
-    { id: 4, title: "Mad Max: Fury Road", genre: "Action", year: 2015, match: "94%", desc: "O cursă nebună prin deșert pentru supraviețuire și libertate." },
-    { id: 5, title: "John Wick", genre: "Action", year: 2014, match: "92%", desc: "Un fost asasin profesionist revine în acțiune pentru a se răzbuna." },
-    { id: 6, title: "Top Gun: Maverick", genre: "Action", year: 2022, match: "95%", desc: "Piloții de elită se întorc pentru o misiune extrem de periculoasă." },
+    // Acțiune (Action)
+    { id: 1, title: "The Dark Knight", genre: "Action", year: 2008, vibe: "Intense", mood: "Deep", match: "96%", desc: "Batman își testează limitele împotriva unui nou geniu al crimei: Jokerul." },
+    { id: 2, title: "Gladiator", genre: "Action", year: 2000, vibe: "Intense", mood: "Deep", match: "93%", desc: "Un fost general roman caută răzbunare împotriva împăratului corupt." },
+    { id: 3, title: "The Hunger Games", genre: "Action", year: 2012, vibe: "Intense", mood: "Deep", match: "91%", desc: "Luptă pentru supraviețuire într-o distopie implacabilă." },
+    { id: 4, title: "Mad Max: Fury Road", genre: "Action", year: 2015, vibe: "Intense", mood: "Fun", match: "94%", desc: "O cursă nebună prin deșert pentru supraviețuire și libertate." },
+    { id: 5, title: "John Wick", genre: "Action", year: 2014, vibe: "Intense", mood: "Fun", match: "92%", desc: "Un fost asasin profesionist revine în acțiune pentru a se răzbuna." },
+    { id: 6, title: "Top Gun: Maverick", genre: "Action", year: 2022, vibe: "Intense", mood: "Fun", match: "95%", desc: "Piloții de elită se întorc pentru o misiune extrem de periculoasă." },
+    { id: 31, title: "Uncharted", genre: "Action", year: 2022, vibe: "Chill", mood: "Fun", match: "91%", desc: "Nathan Drake și Victor Sullivan pornesc în căutarea unei comori pierdute de secole." },
+    { id: 32, title: "Furios și iute", genre: "Action", year: 2001, vibe: "Intense", mood: "Fun", match: "90%", desc: "Curse ilegale de mașini și loialitate în lumea stradală din Los Angeles." },
+    { id: 33, title: "Aquaman", genre: "Action", year: 2018, vibe: "Intense", mood: "Fun", match: "89%", desc: "Arthur Curry își revendică tronul Atlantidei pentru a opri un război între lumi." },
+    { id: 34, title: "Superman", genre: "Action", year: 2025, vibe: "Intense", mood: "Fun", match: "94%", desc: "O nouă viziune asupra celui mai emblematic erou al lumii, pus la încercare între forță și compasiune." },
+    { id: 35, title: "The Gray Man", genre: "Action", year: 2022, vibe: "Intense", mood: "Fun", match: "90%", desc: "Un agent CIA sub acoperire devine ținta principală a unei vânători globale mortale." },
+    { id: 36, title: "Carry On", genre: "Action", year: 2024, vibe: "Intense", mood: "Fun", match: "88%", desc: "Un tânăr agent TSA este șantajat în ajunul Crăciunului să lase un colet periculos să treacă de control." },
 
-    // Comedie
-    { id: 7, title: "Free Guy", genre: "Comedy", year: 2021, match: "89%", desc: "Un personaj dintr-un joc video decide să devină eroul propriilor sale povești." },
-    { id: 8, title: "Superbad", genre: "Comedy", year: 2007, match: "88%", desc: "Doi liceeni încearcă să aibă o petrecere de neuitat înainte de absolvire." },
-    { id: 9, title: "The Hangover", genre: "Comedy", year: 2009, match: "87%", desc: "Trei prieteni se trezesc în Las Vegas după o petrecere fără să-și amintească nimic." },
-    { id: 10, title: "Grown Ups", genre: "Comedy", year: 2010, match: "85%", desc: "Cei mai buni prieteni din copilărie se reunesc pentru un weekend plin de peripeții." },
-    { id: 11, title: "The Mask", genre: "Comedy", year: 1994, match: "86%", desc: "Un funcționar timid găsește o mască magică ce îl transformă într-un personaj excentric." },
-    { id: 12, title: "Jumanji: Welcome to the Jungle", genre: "Comedy", year: 2017, match: "90%", desc: "Patru adolescenți sunt blocați într-un joc video periculos." },
+    // Comedie (Comedy)
+    { id: 7, title: "Free Guy", genre: "Comedy", year: 2021, vibe: "Chill", mood: "Fun", match: "89%", desc: "Un personaj dintr-un joc video decide să devină eroul propriilor sale povești." },
+    { id: 8, title: "Superbad", genre: "Comedy", year: 2007, vibe: "Chill", mood: "Fun", match: "88%", desc: "Doi liceeni încearcă să aibă o petrecere de neuitat înainte de absolvire." },
+    { id: 9, title: "The Hangover", genre: "Comedy", year: 2009, vibe: "Chill", mood: "Fun", match: "87%", desc: "Trei prieteni se trezesc în Las Vegas după o petrecere fără să-și amintească nimic." },
+    { id: 10, title: "Grown Ups", genre: "Comedy", year: 2010, vibe: "Chill", mood: "Fun", match: "85%", desc: "Cei mai buni prieteni din copilărie se reunesc pentru un weekend plin de peripeții." },
+    { id: 11, title: "The Mask", genre: "Comedy", year: 1994, vibe: "Chill", mood: "Fun", match: "86%", desc: "Un funcționar timid găsește o mască magică ce îl transformă într-un personaj excentric." },
+    { id: 12, title: "Jumanji: Welcome to the Jungle", genre: "Comedy", year: 2017, vibe: "Chill", mood: "Fun", match: "90%", desc: "Patru adolescenți sunt blocați într-un joc video periculos." },
 
     // Dragoste (Romance)
-    { id: 13, title: "After", genre: "Romance", year: 2019, match: "96%", desc: "O studentă cuminte se îndrăgostește de un băiat rebel și misterios care îi schimbă perspectiva." },
-    { id: 14, title: "To All the Boys I've Loved Before", genre: "Romance", year: 2018, match: "97%", desc: "Viața amoroasă secretă a unei adolescente scapă de sub control când scrisorile sunt expediate." },
-    { id: 15, title: "The Notebook", genre: "Romance", year: 2004, match: "95%", desc: "O poveste de dragoste emoționantă pe parcursul a zeci de ani." },
-    { id: 16, title: "La La Land", genre: "Romance", year: 2016, match: "92%", desc: "Un muzician de jazz și o aspirantă la actorie se îndrăgostesc în Los Angeles." },
-    { id: 17, title: "Titanic", genre: "Romance", year: 1997, match: "98%", desc: "O iubire pasională între doi tineri din clase sociale diferite la bordul vasului." },
-    { id: 18, title: "The Kissing Booth", genre: "Romance", year: 2018, match: "91%", desc: "Prima idilă a unei adolescente devine amenințată când se îndrăgostește de fratele celui mai bun prieten." },
+    { id: 13, title: "After", genre: "Romance", year: 2019, vibe: "Chill", mood: "Deep", match: "96%", desc: "O studentă cuminte se îndrăgostește de un băiat rebel și misterios care îi schimbă perspectiva." },
+    { id: 14, title: "To All the Boys I've Loved Before", genre: "Romance", year: 2018, vibe: "Chill", mood: "Fun", match: "97%", desc: "Viața amoroasă secretă a unei adolescente scapă de sub control când scrisorile sunt expediate." },
+    { id: 15, title: "The Notebook", genre: "Romance", year: 2004, vibe: "Chill", mood: "Deep", match: "95%", desc: "O poveste de dragoste emoționantă pe parcursul a zeci de ani." },
+    { id: 16, title: "La La Land", genre: "Romance", year: 2016, vibe: "Chill", mood: "Deep", match: "92%", desc: "Un muzician de jazz și o aspirantă la actorie se îndrăgostesc în Los Angeles." },
+    { id: 17, title: "Titanic", genre: "Romance", year: 1997, vibe: "Intense", mood: "Deep", match: "98%", desc: "O iubire pasională între doi tineri din clase sociale diferite la bordul vasului." },
+    { id: 18, title: "The Kissing Booth", genre: "Romance", year: 2018, vibe: "Chill", mood: "Fun", match: "91%", desc: "Prima idilă a unei adolescente devine amenințată când se îndrăgostește de fratele celui mai bun prieten." },
+    { id: 37, title: "Inimi purpurii", genre: "Romance", year: 2022, vibe: "Chill", mood: "Deep", match: "95%", desc: "O cântăreață și un pușcaș marin formează o căsnicie de conveniență care se transformă într-o poveste reală." },
 
-    // Horror
-    { id: 19, title: "The Conjuring", genre: "Horror", year: 2013, match: "91%", desc: "Investigatorii paranormali Ed și Lorraine Warren ajută o familie terorizată." },
-    { id: 20, title: "It", genre: "Horror", year: 2017, match: "89%", desc: "Un grup de copii se confruntă cu cel mai mare coșmar al lor: un clovn sinistru." },
-    { id: 21, title: "A Quiet Place", genre: "Horror", year: 2018, match: "93%", desc: "O familie trebuie să trăiască în tăcere absolută pentru a se feri de creaturi." },
-    { id: 22, title: "Hereditary", genre: "Horror", year: 2018, match: "88%", desc: "O familie începe să descopere secrete terifiante despre strămoșii lor." },
-    { id: 23, title: "The Exorcist", genre: "Horror", year: 1973, match: "90%", desc: "Capodopera clasică despre posesia diabolică a unei tinere fete." },
-    { id: 24, title: "Scream", genre: "Horror", year: 1996, match: "87%", desc: "Un criminal în serie mascat terorizează un grup de adolescenți." },
+    // Horror / Dramă intensă
+    { id: 19, title: "The Conjuring", genre: "Horror", year: 2013, vibe: "Intense", mood: "Deep", match: "91%", desc: "Investigatorii paranormali Ed și Lorraine Warren ajută o familie terorizată." },
+    { id: 20, title: "It", genre: "Horror", year: 2017, vibe: "Intense", mood: "Deep", match: "89%", desc: "Un grup de copii se confruntă cu cel mai mare coșmar al lor: un clovn sinistru." },
+    { id: 21, title: "A Quiet Place", genre: "Horror", year: 2018, vibe: "Intense", mood: "Deep", match: "93%", desc: "O familie trebuie să trăiască în tăcere absolută pentru a se feri de creaturi." },
+    { id: 22, title: "Hereditary", genre: "Horror", year: 2018, vibe: "Intense", mood: "Deep", match: "88%", desc: "O familie începe să descopere secrete terifiante despre strămoșii lor." },
+    { id: 23, title: "The Exorcist", genre: "Horror", year: 1973, vibe: "Intense", mood: "Deep", match: "90%", desc: "Capodopera clasică despre posesia diabolică a unei tinere fete." },
+    { id: 24, title: "Scream", genre: "Horror", year: 1996, vibe: "Intense", mood: "Fun", match: "87%", desc: "Un criminal în serie mascat terorizează un grup de adolescenți." },
+    { id: 38, title: "Joker", genre: "Horror", year: 2019, vibe: "Intense", mood: "Deep", match: "95%", desc: "Un comediant ignorat de societate alunecă treptat în haos și nebunie în Gotham City." },
 
-    // Animații
-    { id: 25, title: "Spider-Man: Into the Spider-Verse", genre: "Animation", year: 2018, match: "99%", desc: "Miles Morales devine noul Om-Păianzen și descoperă universul paralel." },
-    { id: 26, title: "Coco", genre: "Animation", year: 2017, match: "97%", desc: "Un băiețel pasionat de muzică ajunge accidental în Tărâmul Morților." },
-    { id: 27, title: "Up", genre: "Animation", year: 2009, match: "95%", desc: "Un bătrân simpatic își leagă mii de baloane de casă și zboară în America de Sud." },
-    { id: 28, title: "Toy Story", genre: "Animation", year: 1995, match: "94%", desc: "Jucăriile prind viață atunci când oamenii nu sunt în preajmă." },
-    { id: 29, title: "Inside Out", genre: "Animation", year: 2015, match: "96%", desc: "Emoțiile din mintea unei fetițe încearcă să o ghideze printr-o schimbare majoră." },
-    { id: 30, title: "Shrek", genre: "Animation", year: 2001, match: "98%", desc: "Un ogru morocănos pornește într-o misiune pentru a-și salva mlaștina." }
+    // Animații (Animation)
+    { id: 25, title: "Spider-Man: Into the Spider-Verse", genre: "Animation", year: 2018, vibe: "Intense", mood: "Fun", match: "99%", desc: "Miles Morales devine noul Om-Păianjen și descoperă universul paralel." },
+    { id: 26, title: "Coco", genre: "Animation", year: 2017, vibe: "Chill", mood: "Deep", match: "97%", desc: "Un băiețel pasionat de muzică ajunge accidental în Tărâmul Morților." },
+    { id: 27, title: "Up", genre: "Animation", year: 2009, vibe: "Chill", mood: "Deep", match: "95%", desc: "Un bătrân simpatic își leagă mii de baloane de casă și zboară în America de Sud." },
+    { id: 28, title: "Toy Story", genre: "Animation", year: 1995, vibe: "Chill", mood: "Fun", match: "94%", desc: "Jucăriile prind viață atunci când oamenii nu sunt în preajmă." },
+    { id: 29, title: "Inside Out", genre: "Animation", year: 2015, vibe: "Chill", mood: "Deep", match: "96%", desc: "Emoțiile din mintea unei fetițe încearcă să o ghideze printr-o schimbare majoră." },
+    { id: 30, title: "Shrek", genre: "Animation", year: 2001, vibe: "Chill", mood: "Fun", match: "98%", desc: "Un ogru morocănos pornește într-o misiune pentru a-și salva mlaștina." },
+    { id: 39, title: "Frozen", genre: "Animation", year: 2013, vibe: "Chill", mood: "Deep", match: "93%", desc: "Anna pornește într-o călătorie periculoasă pentru a o aduce înapoi pe sora ei, Elsa." },
+    { id: 40, title: "Odiseea", genre: "Animation", year: 2016, vibe: "Chill", mood: "Deep", match: "91%", desc: "O călătorie plină de aventură și descoperiri pe urmele unei povești legendare." }
 ];
 
 const questions = [
-    { question: "Care este genul preferat pentru seara asta?", options: [{ text: "🚀 Acțiune", genre: "Action" }, { text: "😂 Comedie", genre: "Comedy" }, { text: "❤️ Dragoste", genre: "Romance" }, { text: "👻 Horror", genre: "Horror" }, { text: "🎨 Animație", genre: "Animation" }] },
+    { question: "Care este genul preferat pentru seara asta?", options: [{ text: "🚀 Acțiune", genre: "Action" }, { text: "😂 Comedie", genre: "Comedy" }, { text: "❤️ Dragoste", genre: "Romance" }, { text: "👻 Horror / Thriller", genre: "Horror" }, { text: "🎨 Animație", genre: "Animation" }] },
     { question: "Cu cine te uiți?", options: [{ text: "👥 În grup / Cu prietenii", genre: "Group" }, { text: "👤 Singur în pătură", genre: "Solo" }] },
     { question: "Ce durată preferi?", options: [{ text: "⏱️ Sub 2 ore (Rapid & Dinamic)", genre: "Short" }, { text: "🎬 Peste 2 ore (Epic & Detaliat)", genre: "Long" }] },
     { question: "Ce perioadă preferi?", options: [{ text: "🔥 Filme recente (Ultimii ani)", genre: "New" }, { text: "🏆 Capodopere clasice", genre: "Classic" }] },
@@ -62,7 +72,7 @@ let currentRoomCode = "";
 let currentPlayerId = "";
 let currentPlayerName = "";
 let isHost = false;
-let myApprovalStatus = "pending"; // "pending" | "approved" | "rejected"
+let myApprovalStatus = "pending";
 let roomState = null;
 let votingPool = [];
 let groupMovieIndex = 0;
@@ -153,7 +163,6 @@ function sendWS(msg) {
 function handleWSMessage(msg) {
     if (!msg || !msg.type) return;
 
-    // 1. Gazda primește cerere de la un participant nou
     if (msg.type === "JOIN_REQUEST" && isHost && roomState) {
         const exists = roomState.players.some(p => p.id === msg.playerId);
         if (!exists) {
@@ -169,7 +178,6 @@ function handleWSMessage(msg) {
         sendWS({ type: "ROOM_SYNC", state: roomState });
     }
 
-    // 2. Sincronizare generală a camerei
     if (msg.type === "ROOM_SYNC" && msg.state) {
         const prevStatus = roomState ? roomState.status : "waiting";
         roomState = msg.state;
@@ -215,7 +223,6 @@ function handleWSMessage(msg) {
         }
     }
 
-    // 3. Gazda primește voturile unui participant
     if (msg.type === "SUBMIT_VOTES" && isHost && roomState) {
         if (msg.votes && typeof msg.votes === "object") {
             Object.keys(msg.votes).forEach(movieId => {
@@ -268,7 +275,6 @@ function showWaitingOthersVoteScreen() {
     if (swipeBtns) swipeBtns.classList.add("hidden");
 }
 
-// --- CREARE CAMERĂ (GAZDĂ) ---
 function createRoom() {
     const nameInput = document.getElementById("player-name-input").value.trim();
     currentPlayerName = nameInput || "Gazda";
@@ -301,7 +307,6 @@ function createRoom() {
     });
 }
 
-// --- CERERE INTRARE ÎN CAMERĂ (PARTICIPANT) ---
 function joinRoom() {
     const nameInput = document.getElementById("player-name-input").value.trim();
     let codeInput = document.getElementById("join-code-input").value.trim().toUpperCase().replace("#", "");
@@ -623,12 +628,40 @@ function showResults() {
     showScreen('result-screen');
     const container = document.getElementById("movies-container");
     container.innerHTML = "";
-    
-    const selectedGenre = userAnswers[0] || "Action";
-    const filteredMovies = moviesDatabase.filter(m => m.genre === selectedGenre);
-    const resultsToShow = filteredMovies.length > 0 ? filteredMovies : moviesDatabase.slice(0, 5);
 
-    resultsToShow.forEach(m => {
+    // userAnswers[0] = gen, [1] = compania, [2] = durata, [3] = perioada (New / Classic), [4] = atmosfera (Deep / Fun), [5] = intensitate (Intense / Chill)
+    const selectedGenre = userAnswers[0] || "Action";
+    const eraPref = userAnswers[3] || "New";
+    const moodPref = userAnswers[4] || "Fun";
+    const vibePref = userAnswers[5] || "Chill";
+
+    const matchesEra = (movie) => {
+        if (eraPref === "New") return movie.year >= 2015;
+        return movie.year < 2015;
+    };
+
+    // 1. Încercăm potrivire completă: gen + perioadă (din ultimii ani / clasic) + atmosferă/intensitate
+    let resultsToShow = moviesDatabase.filter(m =>
+        m.genre === selectedGenre &&
+        matchesEra(m) &&
+        (m.mood === moodPref || m.vibe === vibePref)
+    );
+
+    // 2. Dacă sunt prea puține, păstrăm strict genul + perioada aleasă (ex. doar filme recente!)
+    if (resultsToShow.length < 2) {
+        const byGenreAndEra = moviesDatabase.filter(m => m.genre === selectedGenre && matchesEra(m));
+        if (byGenreAndEra.length > 0) {
+            resultsToShow = byGenreAndEra;
+        }
+    }
+
+    // 3. Dacă genul respectiv nu are filme în perioada aleasă, luăm orice film din perioada aleasă (tot fără să stricăm „Filme recente”)
+    if (resultsToShow.length === 0) {
+        const byEraOnly = moviesDatabase.filter(m => matchesEra(m));
+        resultsToShow = byEraOnly.length > 0 ? byEraOnly : moviesDatabase.slice(0, 5);
+    }
+
+    resultsToShow.slice(0, 6).forEach(m => {
         container.innerHTML += `
             <div class="movie-item">
                 <div class="movie-header">

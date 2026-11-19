@@ -76,6 +76,10 @@ window.onload = function() {
         openRoomChoice();
         const joinInput = document.getElementById("join-code-input");
         if (joinInput) joinInput.value = roomParam.toUpperCase();
+    } else if (document.getElementById("onboarding-screen")) {
+        showScreen('onboarding-screen');
+    } else {
+        showScreen('home-screen');
     }
 };
 
@@ -192,14 +196,21 @@ function handleWSMessage(msg) {
                     renderApprovedLobby();
                 } else if (roomState.status === "voting" && prevStatus !== "voting") {
                     beginGroupVoting(roomState.movies);
-                } else if (roomState.status === "voting" && !document.getElementById("group-result-screen").classList.contains("hidden")) {
+                } else if (roomState.status === "finished") {
                     showGroupFinalResults();
+                } else if (me && me.done) {
+                    showWaitingOthersVoteScreen();
                 }
             }
         } else {
             updateLobbyUI();
-            if (roomState.status === "voting" && !document.getElementById("group-result-screen").classList.contains("hidden")) {
+            if (roomState.status === "finished") {
                 showGroupFinalResults();
+            } else {
+                const me = roomState.players.find(p => p.id === currentPlayerId);
+                if (me && me.done && document.getElementById("group-result-screen").classList.contains("hidden")) {
+                    showWaitingOthersVoteScreen();
+                }
             }
         }
     }
@@ -216,11 +227,45 @@ function handleWSMessage(msg) {
         const player = roomState.players.find(p => p.id === msg.playerId);
         if (player) player.done = true;
 
-        sendWS({ type: "ROOM_SYNC", state: roomState });
-        if (!document.getElementById("group-result-screen").classList.contains("hidden")) {
-            showGroupFinalResults();
+        checkIfAllFinishedAndSync();
+    }
+}
+
+function checkIfAllFinishedAndSync() {
+    if (!isHost || !roomState) return;
+    const approvedPlayers = roomState.players.filter(p => p.status === "approved");
+    const allDone = approvedPlayers.length > 0 && approvedPlayers.every(p => p.done === true);
+
+    if (allDone) {
+        roomState.status = "finished";
+    }
+
+    sendWS({ type: "ROOM_SYNC", state: roomState });
+
+    if (allDone) {
+        showGroupFinalResults();
+    } else {
+        const me = roomState.players.find(p => p.id === currentPlayerId);
+        if (me && me.done) {
+            showWaitingOthersVoteScreen();
         }
     }
+}
+
+function showWaitingOthersVoteScreen() {
+    showScreen('group-voting-screen');
+    document.getElementById("group-vote-counter").innerText = "Vot trimis!";
+    document.getElementById("group-progress-fill").style.width = "100%";
+
+    const approved = roomState ? roomState.players.filter(p => p.status === "approved") : [];
+    const doneCount = approved.filter(p => p.done).length;
+
+    document.getElementById("group-movie-title").innerText = "⏳ Așteptăm ceilalți participanți...";
+    document.getElementById("group-movie-meta").innerText = `Au terminat de votat: ${doneCount} din ${approved.length}`;
+    document.getElementById("group-movie-desc").innerText = "Imediat ce răspunde toată lumea, afișăm filmul cel mai potrivit pentru grup.";
+
+    const swipeBtns = document.querySelector("#group-voting-screen .swipe-buttons");
+    if (swipeBtns) swipeBtns.classList.add("hidden");
 }
 
 // --- CREARE CAMERĂ (GAZDĂ) ---
@@ -415,6 +460,9 @@ function rejectPlayer(playerId) {
 function hostStartVoting() {
     if (!isHost || !roomState) return;
     roomState.status = "voting";
+    roomState.players.forEach(p => {
+        if (p.status === "approved") p.done = false;
+    });
     sendWS({ type: "ROOM_SYNC", state: roomState });
     beginGroupVoting(roomState.movies);
 }
@@ -423,6 +471,10 @@ function beginGroupVoting(movies) {
     votingPool = movies || [];
     groupMovieIndex = 0;
     myVotes = {};
+
+    const swipeBtns = document.querySelector("#group-voting-screen .swipe-buttons");
+    if (swipeBtns) swipeBtns.classList.remove("hidden");
+
     showScreen('group-voting-screen');
     const label = document.getElementById("voting-player-label");
     if (label) label.innerHTML = `Votezi ca: <strong>${currentPlayerName}</strong>`;
@@ -452,6 +504,9 @@ function voteMovie(liked) {
 }
 
 function submitGroupVotes() {
+    const swipeBtns = document.querySelector("#group-voting-screen .swipe-buttons");
+    if (swipeBtns) swipeBtns.classList.add("hidden");
+
     if (isHost && roomState) {
         Object.keys(myVotes).forEach(id => {
             if (myVotes[id]) {
@@ -460,26 +515,26 @@ function submitGroupVotes() {
         });
         const me = roomState.players.find(p => p.id === currentPlayerId);
         if (me) me.done = true;
-        sendWS({ type: "ROOM_SYNC", state: roomState });
+        checkIfAllFinishedAndSync();
     } else {
+        if (roomState) {
+            const me = roomState.players.find(p => p.id === currentPlayerId);
+            if (me) me.done = true;
+        }
+        showWaitingOthersVoteScreen();
         sendWS({
             type: "SUBMIT_VOTES",
             playerId: currentPlayerId,
             player: currentPlayerName,
             votes: myVotes
         });
-        if (roomState) {
-            Object.keys(myVotes).forEach(id => {
-                if (myVotes[id]) {
-                    roomState.votes[id] = (roomState.votes[id] || 0) + 1;
-                }
-            });
-        }
     }
-    showGroupFinalResults();
 }
 
 function showGroupFinalResults() {
+    const swipeBtns = document.querySelector("#group-voting-screen .swipe-buttons");
+    if (swipeBtns) swipeBtns.classList.remove("hidden");
+
     showScreen('group-result-screen');
     const container = document.getElementById("group-ranking-container");
     if (!container) return;
@@ -498,11 +553,19 @@ function showGroupFinalResults() {
         }))
         .sort((a, b) => b.score - a.score);
 
+    const winner = ranked[0];
+    const subtitleEl = document.getElementById("group-result-subtitle");
+    if (subtitleEl && winner && winner.score > 0) {
+        subtitleEl.innerHTML = `Film potrivit pentru grup: <strong>${winner.title}</strong> (${winner.score}/${approvedCount} voturi)`;
+    } else if (subtitleEl) {
+        subtitleEl.innerText = "Clasamentul filmelor votate de gașcă:";
+    }
+
     ranked.forEach((m, index) => {
         const percent = Math.round((m.score / approvedCount) * 100);
         const isWinner = index === 0 && m.score > 0;
         const badgeText = isWinner
-            ? `🏆 RĂSPUNS FINAL / CÂȘTIGĂTOR (${m.score}/${approvedCount} voturi)`
+            ? `🏆 POTRIVIT PENTRU TOȚI (${m.score}/${approvedCount} voturi)`
             : `${m.score}/${approvedCount} voturi (${percent}%)`;
 
         container.innerHTML += `
@@ -603,6 +666,7 @@ function sendWhatsAppInvite() {
     const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(inviteText)}`;
     window.open(whatsappUrl, '_blank');
 }
+
 // --- ONBOARDING SLIDES ---
 const onboardingSlides = [
     {
@@ -636,13 +700,11 @@ function nextOnboardingSlide() {
     document.getElementById("slide-title").innerText = slide.title;
     document.getElementById("slide-desc").innerText = slide.desc;
 
-    // Actualizare buline
     const dots = document.querySelectorAll("#slide-dots .dot");
     dots.forEach((d, idx) => {
         d.classList.toggle("active-dot", idx === currentSlide);
     });
 
-    // Pe ultimul slide schimbăm textul butonului
     if (currentSlide === onboardingSlides.length - 1) {
         document.getElementById("btn-next-slide").innerText = "Începe acum 🚀";
     }

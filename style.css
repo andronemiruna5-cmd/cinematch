@@ -370,3 +370,16 @@ header p {
     from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }
 }
+.dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #3f3f46;
+    transition: all 0.3s ease;
+}
+
+.active-dot {
+    width: 24px;
+    border-radius: 6px;
+    background: #e11d48;
+}

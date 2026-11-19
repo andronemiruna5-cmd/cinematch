@@ -19,8 +19,30 @@
         </header>
 
         <main>
+            <!-- ECRANUL 0: ONBOARDING SLIDES -->
+            <section id="onboarding-screen" class="card">
+                <div id="slide-content" style="text-align: center; padding: 15px 5px;">
+                    <div id="slide-icon" style="font-size: 3.5rem; margin-bottom: 12px;">🍿</div>
+                    <h2 id="slide-title" style="margin-bottom: 10px;">Bine ai venit la CineMatch!</h2>
+                    <p id="slide-desc" class="subtitle" style="line-height: 1.5; margin-bottom: 20px;">
+                        Nu mai pierde o oră căutând la ce să te uiți. Găsim filmul potrivit în câteva secunde.
+                    </p>
+                </div>
+
+                <div id="slide-dots" style="display: flex; justify-content: center; gap: 8px; margin-bottom: 22px;">
+                    <span class="dot active-dot"></span>
+                    <span class="dot"></span>
+                    <span class="dot"></span>
+                </div>
+
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn-secondary" onclick="finishOnboarding()" style="flex: 1; margin-bottom: 0;">Sari peste</button>
+                    <button id="btn-next-slide" class="btn-primary" onclick="nextOnboardingSlide()" style="flex: 2; margin-bottom: 0;">Următorul →</button>
+                </div>
+            </section>
+
             <!-- ECRANUL 1: MENIU PRINCIPAL -->
-            <section id="home-screen" class="card">
+            <section id="home-screen" class="card hidden">
                 <h2>Alege cum vrei să căutăm</h2>
                 <p class="subtitle">Ce facem în seara asta?</p>
                 
@@ -28,7 +50,7 @@
                     <button class="btn-primary" onclick="startQuiz()">🧠 Quiz Rapid (Solo - 6 Pași)</button>
                     <button class="btn-secondary" onclick="openRoomChoice()">👥 Seară cu Gașca (Cameră Live)</button>
                     <button class="btn-secondary" onclick="startWheel()">🎡 Roata Norocului</button>
-                   
+                </div>
             </section>
 
             <!-- ECRANUL 2: CREEAZĂ SAU INTRĂ ÎN CAMERĂ -->
@@ -50,10 +72,10 @@
                 <button class="btn-back" onclick="goHome()">← Înapoi la meniu</button>
             </section>
 
-            <!-- ECRANUL 3: LOBBY CAMERĂ (VEZI CINE INTRĂ + START) -->
+            <!-- ECRANUL 3: LOBBY CAMERĂ (VEZI CINE INTRĂ + APROBARE + START) -->
             <section id="lobby-screen" class="card hidden">
                 <h2>Lobby Cameră 🎬</h2>
-                <p class="subtitle">Trimite codul sau scanează QR-ul de pe aceeași rețea/host:</p>
+                <p class="subtitle">Trimite codul sau scanează QR-ul pentru a intra în lobby:</p>
 
                 <div id="qrcode-box"></div>
                 <div class="session-code">Cod cameră: <strong id="lobby-room-code">#CINE-0000</strong></div>
@@ -61,7 +83,6 @@
                 <div class="players-box">
                     <div class="players-header">
                         <span>Participanți în cameră (<span id="players-count">1</span>):</span>
-                        <button class="btn-mini" onclick="addDemoFriend()" title="Adaugă un prieten de test">+ Simulează prieten</button>
                     </div>
                     <ul id="players-list" class="players-list"></ul>
                 </div>
@@ -133,7 +154,6 @@
                 
                 <div id="movies-container" class="movies-list"></div>
 
-                <button class="btn-primary" onclick="openVipTicket()">🎟️ Vezi Biletul VIP</button>
                 <button class="btn-secondary" onclick="goHome()">🔄 Meniul Principal</button>
             </section>
 

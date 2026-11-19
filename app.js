@@ -603,3 +603,51 @@ function sendWhatsAppInvite() {
     const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(inviteText)}`;
     window.open(whatsappUrl, '_blank');
 }
+// --- ONBOARDING SLIDES ---
+const onboardingSlides = [
+    {
+        icon: "🍿",
+        title: "Bine ai venit la CineMatch!",
+        desc: "Nu mai pierde o oră căutând la ce să te uiți. Găsim filmul potrivit în câteva secunde."
+    },
+    {
+        icon: "👥",
+        title: "Seară de film cu gașca",
+        desc: "Creează o cameră privată, aprobă-ți prietenii în lobby și votați împreună filmul câștigător."
+    },
+    {
+        icon: "🎡",
+        title: "Quiz Rapid & Roata Norocului",
+        desc: "Ești singur sau nehotărât? Răspunde la 6 întrebări scurte sau lasă roata să decidă pentru tine!"
+    }
+];
+
+let currentSlide = 0;
+
+function nextOnboardingSlide() {
+    currentSlide++;
+    if (currentSlide >= onboardingSlides.length) {
+        finishOnboarding();
+        return;
+    }
+
+    const slide = onboardingSlides[currentSlide];
+    document.getElementById("slide-icon").innerText = slide.icon;
+    document.getElementById("slide-title").innerText = slide.title;
+    document.getElementById("slide-desc").innerText = slide.desc;
+
+    // Actualizare buline
+    const dots = document.querySelectorAll("#slide-dots .dot");
+    dots.forEach((d, idx) => {
+        d.classList.toggle("active-dot", idx === currentSlide);
+    });
+
+    // Pe ultimul slide schimbăm textul butonului
+    if (currentSlide === onboardingSlides.length - 1) {
+        document.getElementById("btn-next-slide").innerText = "Începe acum 🚀";
+    }
+}
+
+function finishOnboarding() {
+    showScreen('home-screen');
+}

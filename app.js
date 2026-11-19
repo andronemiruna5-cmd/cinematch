@@ -356,6 +356,9 @@ function showPendingApprovalScreen() {
     const startBtn = document.getElementById("btn-start-group");
     if (startBtn) startBtn.classList.add("hidden");
 
+    const waBtn = document.querySelector("#lobby-screen .btn-whatsapp");
+    if (waBtn) waBtn.classList.add("hidden");
+
     const waitMsg = document.getElementById("waiting-host-msg");
     if (waitMsg) {
         waitMsg.classList.remove("hidden");
@@ -369,7 +372,6 @@ function showPendingApprovalScreen() {
     const countEl = document.getElementById("players-count");
     if (countEl) countEl.innerText = "0";
 }
-
 function renderApprovedLobby() {
     showScreen('lobby-screen');
     document.getElementById("lobby-room-code").innerText = "#" + currentRoomCode;
@@ -394,8 +396,8 @@ function renderApprovedLobby() {
 
     if (isHost) {
         if (startBtn) startBtn.classList.remove("hidden");
-        if (waitMsg) waitMsg.classList.add("hidden");
         if (waBtn) waBtn.classList.remove("hidden");
+        if (waitMsg) waitMsg.classList.add("hidden");
     } else {
         if (startBtn) startBtn.classList.add("hidden");
         if (waBtn) waBtn.classList.add("hidden");

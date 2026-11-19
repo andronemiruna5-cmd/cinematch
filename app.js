@@ -375,12 +375,14 @@ function showPendingApprovalScreen() {
 function renderApprovedLobby() {
     showScreen('lobby-screen');
     document.getElementById("lobby-room-code").innerText = "#" + currentRoomCode;
+
     const vipCode = document.getElementById("vip-room-code");
     if (vipCode) vipCode.innerText = "#" + currentRoomCode;
 
     const roomUrl = `${OFFICIAL_URL}?room=${currentRoomCode}`;
     const qrContainer = document.getElementById("qrcode-box");
     qrContainer.innerHTML = "";
+
     new QRCode(qrContainer, {
         text: roomUrl,
         width: 140,
@@ -396,16 +398,18 @@ function renderApprovedLobby() {
 
     if (isHost) {
         if (startBtn) startBtn.classList.remove("hidden");
-        if (waBtn) waBtn.classList.remove("hidden");
         if (waitMsg) waitMsg.classList.add("hidden");
     } else {
         if (startBtn) startBtn.classList.add("hidden");
-        if (waBtn) waBtn.classList.add("hidden");
+
         if (waitMsg) {
             waitMsg.classList.remove("hidden");
             waitMsg.innerText = "✅ Ai fost acceptat în cameră! Așteaptă ca gazda să dea START.";
         }
     }
+
+    // Toti participantii acceptati pot invita prieteni.
+    if (waBtn) waBtn.classList.remove("hidden");
 
     updateLobbyUI();
 }
@@ -699,9 +703,13 @@ function openVipTicket() {
 function sendWhatsAppInvite() {
     const code = (currentRoomCode || "CINE-8821").replace('#', '');
     const inviteLink = `${OFFICIAL_URL}?room=${code}`;
-    const inviteText = `🍿 Salut! Intră în camera mea CineMatch să votăm filmul pentru seara asta!\nCod cameră: #${code}\nLink direct: ${inviteLink}`;
-    
+
+    const inviteText = `🍿 Salut! Intră în camera noastră CineMatch să votăm filmul pentru seara asta!
+Cod cameră: #${code}
+Link direct: ${inviteLink}`;
+
     const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(inviteText)}`;
+
     window.open(whatsappUrl, '_blank');
 }
 
